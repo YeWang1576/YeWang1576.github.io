@@ -1,7 +1,5 @@
 ---
-title: None
+title: Forthcoming
 collection: publication
-permalink: /publication/paper1
 ---
 
-Forthcoming
