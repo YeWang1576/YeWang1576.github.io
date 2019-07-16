@@ -1,0 +1,194 @@
+---
+title: "Quant II"
+subtitle: "Machine Learning and Optimization"
+author: "Ye Wang"
+date: "4/25/2018"
+output: beamer_presentation
+
+---
+# Machine learning and optimization in social sciences
+- How could machine learning be applied to social sciences?
+    - Variable creation: train a model and use it to code data
+    - Methods: prediction and heterogeneity
+- Optimization has two meanings:
+    - Causal inference as an optimization problem
+    - Optimize your R code
+
+
+# Variable creation
+>- The problem: transform texts, images, audio, or even video into variables
+>- A common solution: 1. hire workers to code part of it, 2. train a model, 3. let the machine do the rest
+>- Example I: forest on Google maps (Burgess et al., 2012)
+>- Example II: topics in Chinese social media posts (King et al., 2013, 2014)
+>- Example III: use images to detect protests (Zhang and Pan, 2019; Donghyeon et al., 2019)
+>- Example IV: audio and video processing (Know and Lucas, 2018)
+>- Example V: identify Russian bots on Twitter (Stukal et al., 2017)
+>- What if it is too expensive? Active learning (Miller et al., 2019)
+
+
+
+# Methods: prediction
+- Some relationships in causal inference can be non-causal
+- We just need to fit/predict it with a high accuracy
+    - Example I: Propensity score
+    - Example II: Stage one of IV
+    - Example III: Response surface
+
+\pause
+- What if we just throw a bunch of variables into the first stage?
+\pause
+- Bias in both estimation and inference (Cattaneo et al., 2019)
+
+# Example: double selection
+```{r ds, echo=FALSE}
+require(hdm)
+set.seed(1)
+n = 100 #sample size
+p = 100 # number of variables
+s = 3 # nubmer of variables with non-zero coefficients
+X = Xnames = matrix(rnorm(n*p), ncol=p)
+dim(X)
+colnames(Xnames) <- paste("V", 1:p, sep="")
+beta = c(rep(5,s), rep(0,p-s))
+Y = X%*%beta + rnorm(n)
+reg.lasso <- rlasso(Y~Xnames)
+X.selected <- X[, coef(reg.lasso)[-1]!=0]
+dim(X.selected)
+```
+
+# Methods: heterogeneity
+>- Heterogeneity just means a relationship between the effect and the moderators: $TE = f(\mathbf{X})$.
+>- It is thus a machine learning problem.
+>- Example I: Trees and forests
+>- Example II: X-learner
+
+# Example: causal forest
+```{r cf, echo=FALSE}
+require(grf)
+n = 2000; p = 10
+X = matrix(rnorm(n*p), n, p)
+X.test = matrix(0, 101, p)
+X.test[,1] = seq(-2, 2, length.out = 101)
+# Train a causal forest.
+W = rbinom(n, 1, 0.4 + 0.2 * (X[,1] > 0))
+Y = pmax(X[,1], 0) * W + X[,2] + pmin(X[,3], 0) + rnorm(n)
+tau.forest = causal_forest(X, Y, W)
+# Estimate treatment effects for the training data using out-of-bag prediction.
+tau.hat.oob = predict(tau.forest)
+hist(tau.hat.oob$predictions)
+```
+
+# Methods: new directions
+>- Experiment + gradient descent (Wager and Kuang, 2019)
+>- What is the optimal price offered to drivers for UBER?
+>- Drivers decide whether to work after observing the price (an inverted U-shape profit curve).
+>- Assign each driver $p_i = p_0 + \varepsilon_i$.
+>- Calculate the slope of tangent at $p_0$, and do gradient descent to find $p_1$.
+>- Repeat until convergence.
+
+# Optimization
+>- Optimization is underlying many extant methods: weighting, matching, RD, SC, etc.
+>- Most estimators generate estimates by weighting the outcome variable.
+>- We want to balance the accuracy and parsimony of weighting.
+>- It is a machine learning problem as well as an optimization problem.
+>- The most common approach: convex optimization:  
+\begin{align*}
+& \text{min } f(\mathbf{x}) \\
+& \text{s.t. } g_k (\mathbf{x}) \leq 0 \\
+& h_k (\mathbf{x}) = 0
+\end{align*}
+>- How to solve? Simplex method.
+
+# Optimization
+Example I: entropy balancing
+```{r ebal, echo=FALSE}
+library(ebal)
+treatment <- c(rep(0,50),rep(1,30))
+X <- rbind(replicate(3,rnorm(50,0)),replicate(3,rnorm(30,.5)))
+colnames(X) <- paste("x",1:3,sep="")
+eb.out <- ebalance(Treatment=treatment, X=X)
+cat("treatment mean", "\n")
+apply(X[treatment==1,], 2, mean)
+cat("weighted control mean", "\n")
+apply(X[treatment==0,], 2, weighted.mean, w=eb.out$w)
+cat("unweighted control mean", "\n")
+apply(X[treatment==0,], 2, mean)
+```
+
+# Optimization
+Let's do it using convex optimization!
+```{r CVXR, echo=FALSE}
+require(CVXR)
+treatment <- c(rep(0,50),rep(1,30))
+X <- rbind(replicate(3,rnorm(50,0)),replicate(3,rnorm(30,.5)))
+colnames(X) <- paste("x",1:3,sep="")
+w <- Variable(nrow(X[treatment==0,]))
+K <- 2
+constraint_list <- list(sum(w) == 1)
+for (k in 1:K){
+  mK1 <- X[treatment==0, 1]^k
+  mK2 <- X[treatment==0, 2]^k
+  mK3 <- X[treatment==0, 3]^k
+  constraint_list[[3*(k-1)+2]] <- t(w) %*% mK1 == mean(X[treatment==1, 1]^k)
+  constraint_list[[3*(k-1)+3]] <- t(w) %*% mK2 == mean(X[treatment==1, 2]^k)
+  constraint_list[[3*(k-1)+4]] <- t(w) %*% mK3 == mean(X[treatment==1, 3]^k)
+  # constraint_list[[2*k + 1]] <- t(w) %*% mK / length(mK) >= mean(plot.08$dist^k) - e
+}
+objective <- Maximize(sum(entr(w) - w))
+# objective <- Minimize(mean(w^2))
+problem <- Problem(objective, constraints = constraint_list)
+result <- solve(problem)
+cat("treatment mean", "\n")
+apply(X[treatment==1,], 2, mean)
+cat("weighted control mean", "\n")
+apply(X[treatment==0,], 2, weighted.mean, w=result$getValue(w))
+cat("unweighted control mean", "\n")
+apply(X[treatment==0,], 2, mean)
+```
+
+# Optimization
+>- Example II: optimal bandwidth of RD
+![](/Users/yewang/Dropbox/RECITATION_2019/9/Imbens_Wager_band.png)
+
+# Optimization
+>- Example III: evolutionary tree  
+\pause
+How to optimally partition an interval?  
+\pause
+Generate 10,000 partitions and let them "evolve"...
+\includegraphics[width=0.8\linewidth]{/Users/yewang/Documents/GitHub/ModerationTest/graph/evtree-3l.pdf}
+
+# Optimize your R code
+>- The R Inferno (Don't grow matrices!)
+>- Parallel computing
+>- Rcpp
+>- NYU clusters
+
+# Example: parallel computing
+```{r pc, echo=FALSE}
+require(doParallel)
+require(foreach)
+maxcores <- detectCores()
+cores <- min(maxcores, 4)
+pcl<-makeCluster(cores)  
+doParallel::registerDoParallel(pcl)
+cat("Parallel computing with", cores,"cores...\n") 
+k <- matrix(runif(1000*1000, 2, 3), 1000, 1000)
+k.bind <- rep(0, 1000)
+time1 <- Sys.time()
+for (i in 1:1000) {
+  k.bind <- cbind(k.bind, k[,i]^2)
+}
+time2 <- Sys.time()
+time2 - time1
+k <- matrix(runif(1000*1000, 2, 3), 1000, 1000)
+k.bind <- rep(0, 1000)
+time3 <- Sys.time()
+k.bind <- suppressWarnings(foreach(i = 1:1000, .combine = cbind, .inorder = FALSE) %dopar% {k[,i]^2})
+time4 <- Sys.time()
+time4 - time3
+```
+
+
+# The End
+Good luck with your final!

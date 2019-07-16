@@ -1,0 +1,237 @@
+---
+title: "Quant II"
+subtitle: "TSCS Data Estimation"
+author: "Ye Wang"
+date: "3/28/2018"
+output: beamer_presentation
+
+---
+# Outline
+- Roadmap for TSCS data estimation
+- Sequential experiments
+- Semi-parametric models
+- Trajectory balancing
+
+# Roadmap for TSCS data estimation
+- What is the difference between TSCS and panel data?
+\pause
+- What is unique for TSCS data? Why not just pooled OLS?   
+\pause    
+Interference in time is all that matters. 
+\pause
+![DAG for two-way FE models](/Users/yewang/Dropbox/RECITATION_2019/6/IK_DAG.png){width=250px}
+- What is the non-parametric estimator in TSCS data? How to use matching to predict counterfactual for $Y_{it}$?   
+\pause   
+Doesn't exist. Only one observation exists for unit $i$, period $t$ (Imai and Kim, 2019).
+
+# Roadmap for TSCS data estimation
+- Choices must be made
+\pause
+- Assumption I: All the paths between unobservables and the outcome could be blocked by conditioning on the unit's history.
+\pause
+Sequential experiment
+\pause
+- Assumption II: The unobservables have a low-dimension approximation and history doesn't matter.   
+\pause
+Semi-parametric models (FEct, gsynth, mc, etc.)
+\pause
+- Assumption III: The trajectories of the treatment group's and the control group's past outcome are parallel.   
+\pause
+Synthetic control and weighting
+\pause
+- What if I believe in none?   
+\pause 
+Make parametric assumptions
+
+
+# Sequential experiments: then and now
+- A big name we cannot ignore in this literature   
+\pause
+Neal!
+\pause
+- Basic idea: we write down a model for $Y_{it}$ (AR, MA, ARIMA, ADL, etc.).   
+\pause
+The lagged depedent variable does solve a lot of problems, as the time trend is usually the most important confounder.
+\pause
+- Modern approach: Jim Robins's g-estimation   
+\pause
+Works well in epidemiology
+\pause
+- Suppose you participate in a trial to compare two treatments   
+\pause
+You get treatment I, but it doesn't help you much   
+\pause
+Three weeks later, you start to get treatment II   
+\pause
+How to estimate the effect of both treatments?
+
+# Sequential experiments: estimation
+- History decides your final health status
+\pause
+- Suppose there are $T$ weeks, then there are $2^T$ possible "dynamic treatment regimes."\pause Too many!   
+\pause
+- Usually we focus on the causal effect of switching the treatment status in the last a few periods.
+\pause
+- We need sequential ignorability: potential outcomes in the future are independent to the treatment conditional on history.
+\pause
+- We can still use the conventional approach under the selection-on-observables assumption, but it will be biased.
+\pause
+- If we control both $Y_{i, t-1}$, what will happen?   
+\pause
+Post-treatment bias for $X_{i, t-1}$ (but not for $X_{it}$).   
+\pause 
+- What if we don't?   
+\pause 
+Omitted variable bias for $X_{i, t-1}$.   
+
+# Sequential experiments: estimation
+- Two approaches: structural nested mean models (SNMMs) and marginal structural models with inverse probability of treatment weighting (MSMs with IPTWs)
+\pause
+- The former models Y (response) and the latter models D (treatment)
+\pause
+- Let's assume linearity and one lag is necessary for sequential ignorability 
+\pause
+- SNMMs:  
+    - Regress $Y_{it}$ on ($Y_{i, t-1}, X_{it}, X_{i, t-1}$) and get the coefficient of $X_{it}$, $\hat{\gamma_0}$.
+    - Transform $Y_{it}$ into $\tilde{Y}_{it} = Y_{it} - \hat{\gamma_0}X_{it}$
+    - Regress $\tilde{Y}_{it}$ on ($Y_{i, t-2}, X_{i, t-1}, X_{i, t-2}$) and get the coefficient of $X_{i, t-1}$, $\hat{\gamma_1}$.
+\pause
+- MSMs with IPTWs: estimate the propensity score for each $X_{it}$, and use IPTW for ATT.
+![DAG for two-way FE models](/Users/yewang/Dropbox/RECITATION_2019/6/BG_IPTW.png){width=250px}
+
+
+
+# Semi-parametric models: setup
+- Basic idea: predict the counterfactual of $Y_{it}$
+\pause
+- The simplest form: FEct   
+\pause
+$$Y_{it}(0) = \mu + \mathbf{X_{it}}\beta + \alpha_i + \zeta_t + \varepsilon_{it}$$
+\pause
+The only problem is that we cannot apply the within-estimator here (unbalanced panel).
+\pause
+- We can make the error structure more complicated by replacing $\alpha_i + \zeta_t$ with $\lambda_i \mathbf{f}_t$, where $\lambda_i = (\lambda_1, \lambda_2, \dots, \lambda_r)$ and $\mathbf{f}_t = (f_1, f_2, \dots, f_r)$ (interactive FE).   
+How many parameters we need to estimate?
+\pause
+- From a different perspective, we are approximating the matrix $\mathbf{Y} = \{Y_{it}\}$ with the product of two low-dimension matrices: $\mathbf{Y} = \mathbf{L} + \mathbf{\varepsilon}$, where $\mathbf{L} = \Lambda \mathbf{F}$ (matrix completion or MC).   
+\pause
+IFE and MC are equivalent when MC directly penalizes the matrix dimension $r$ (hard-impute) rather than the magnitude of eigen values (soft-impute). 
+
+# Semi-parametric models: estimation
+- IFE relies on the singular value decomposition (SVD).
+- We start from initial parameters, estimate $\beta$ via OLS, and obtain $\lambda_i$ and $\mathbf{f}_t$ via SVD of the residuals.
+- $r$ is selected by cross-validation.
+- MC (soft-impute) uses the direct sum decomposition: the residual at each round can be decomposed into two orthogonal parts.
+- MC (soft-impute) is biased in finite samples.
+- Both work well in large samples (relative performance depends on the strength of factors).
+- We can add other parts to the model such as the lagged dependent variable or ensemble methods (Athey et al., 2019)
+
+# Semi-parametric models: tools
+- A series of packages provided by Yiqing Xu at UCSD and his collaborators
+- panelView for displaying the basic patterns
+- fastplm for estimating the two-way FE models fast
+- gsynth for estimating the interactive FE models
+- fect to rule them all
+
+# Example
+```{r raw-data, echo=FALSE}
+library(ggplot2)
+library(grid)
+library(gridExtra)
+library(fect)
+library(fastplm)
+library(panelView)
+
+setwd("~/Dropbox/CurrentProjects/TSCS_sensitivity/")
+source("code/simulateData.R")
+
+## Generate graphs for FEct, IFEct, and MC
+
+# set parameters for this section
+N <- 200 # number of units
+TT <- 30 # number of periods
+r <- 2 # number of factors
+tr.threshold <- c(0.5,0.6,0.7,0.8,0.9) # the percentage of treated periods
+tr.start <- c(28,25,22,19,16) # the treatment's staring time
+p <- 2 # number of covariates
+beta <- c(1, 3) # coefficients of covariates
+force <- 3 # two-way FE
+mu <- 5
+Rtype <- "u"
+Ftype <- c("white", "arma")
+Fsize <- c(sqrt(3), sqrt(3))
+eff.size <- 4.5
+eff.noise <- 1
+
+data <- simulateData(N = N, TT = TT, r = r, 
+                 tr.threshold = tr.threshold, tr.start = tr.start,
+                 p = p, beta = beta, force = force, mu = mu, Rtype = Rtype, Ftype = Ftype, 
+                 Fsize = Fsize, eff.size = eff.size, eff.noise = eff.noise)
+
+d_ylim <- c(-4, 8)
+e_ylim <- c(-2.5, 2.5)
+panelView(Y ~ D + X1 + X2, data = data, index = c("id","time"), type = "raw")
+```
+
+# Example
+```{r treatment-status, echo=FALSE}
+panelView(Y ~ D + X1 + X2, data = data, index = c("id","time"))
+```
+
+# Example
+```{r fastplm, echo=FALSE}
+out.lm <- fastplm(Y ~ D + X1 + X2, data = data, 
+            index = c("id","time"), se = TRUE) 
+summary(out.lm)
+```
+
+# Example
+\includegraphics[width=\linewidth]{~/Dropbox/CurrentProjects/TSCS_sensitivity/graph/Graphs_Draft/dynamics.pdf}
+
+
+
+# Assumptions behind the semi-parametric models
+- Both IFE and MC require strong exogeneity.
+- It is a generalized version of "parallel trends" in DID.
+\pause
+- How to test the assumption in this more general case?
+\pause
+- Liu, Wang, and Xu (2019): dynamic treatment effects, equivalence test and placebo test.
+
+# Example
+\includegraphics[width=\linewidth]{~/Dropbox/CurrentProjects/TSCS_sensitivity/graph/Graphs_Draft/placebo.pdf}
+
+# Example
+\includegraphics[width=\linewidth]{~/Dropbox/CurrentProjects/TSCS_sensitivity/graph/Graphs_Draft/equivalence.pdf}
+
+
+# Example: Tomz et al. (2007)
+\begin{center}
+\includegraphics[width=\linewidth, height=.6\linewidth]{/Users/yewang/Dropbox/CurrentProjects/TSCS_sensitivity/graph/ex_TGR2007_fect.pdf} \\
+\includegraphics[width=\linewidth, height=.6\linewidth]{/Users/yewang/Dropbox/CurrentProjects/TSCS_sensitivity/graph/ex_TGR2007_ife.pdf}
+\end{center}
+
+
+# Trajectory balancing
+- Outcomes in a TSCS dataset can be divided into four parts:
+![DAG for two-way FE models](/Users/yewang/Dropbox/RECITATION_2019/6/DI_matrix.png){width=350px}
+\pause
+- All we need to do is to predict $\mathbf{Y}_{t,post}(0)$ using the weighted sum of the other three parts.
+\pause
+- The weights should minimize the difference between $\mathbf{Y}_{t,pre}(0)$ and $\mathbf{Y}_{c,pre}(0)$.
+
+# Several approaches
+- Classic one: Synthetic control.
+\pause
+- Problems: hard to get balance with many units and periods.
+- Doudchenko and Imbens (2016): Directly minimize the difference with a penalty function.
+- Hazlett and Xu (2017): Balance moments of the kernelized outcomes.
+- Imai, Kim, and Wang (2018): Matching on the pre-treatment outcomes.
+
+# Future
+- What the TA is working on...
+- Clearly there are some gaps among different branches of the literature.
+- How to unify sequential experiments with semi-parametric models?
+- How to think about TSCS models from the design-based perspective? (Athey and Imbens, 2018)
+- What is the common ground between spatial interference and temporal interference?
+- For example, what can we do to estimate the dynamic effects in a network? (Egami, 2019)

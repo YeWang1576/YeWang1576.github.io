@@ -1,0 +1,402 @@
+---
+output: beamer_presentation
+
+title: "Quant II Recitation"
+author: "Ye Wang <yw1576@nyu.edu>"
+date: "Feb 7, 2018"
+---
+
+
+# Today's Plan
+- Causal inference from a machine learning perspective
+- Regression
+- Simulation (Regression in R)
+
+. . .
+
+
+# Causal inference from a machine learning perpective
+- Now we have been familiar with the Rubin model
+\begin{align*}
+Y_i = \begin{cases} Y_i(1) \text{ if } D_i = 1 \\ Y_i(0) \text{ if } D_i = 0  \end{cases}
+\end{align*}
+\pause
+- For each $i$, we observe either $Y_i(0)$ or $Y_i(1)$ ("Fundamental problem of causal inference")
+\pause
+- Suppose we are interested in ATT, then we just need to know $Y_i(0)$ for each treated unit
+\pause
+- It is a prediction problem: $\hat{Y}_i(0) = f(\mathbf{X}, \mathbf{Y_{(-i)}})$
+
+# Causal inference from a machine learning perpective
+- That's where machine learning enters!
+\pause
+- The target of machine learning algorithms is to find a prediction function $\hat{f}$ that minimizes the expected squared prediction error (ESPE), $E[(f - \hat{f})^2]$
+\pause
+- It is easy to see that 
+\begin{align*}
+E[(f - \hat{f})^2] & = E[f^2 - 2*f*\hat{f} + \hat{f}^2]   \\
+& = f^2 - 2*f*E[\hat{f}] + E[\hat{f}^2]   \\
+& = f^2 - 2*f*E[\hat{f}] + E[\hat{f}]^2 - E[\hat{f}]^2 + E[\hat{f}^2]   \\
+& = (E[\hat{f}] - f)^2 + E[\hat{f}^2] - E[\hat{f}]^2   \\
+& = (Bias(\hat{f}))^2 + Var(\hat{f})
+\end{align*}
+\pause
+- This is called bias-variance trade-off
+- A method with smaller bias usually has larger variance
+
+
+# Causal inference from a machine learning perpective
+- In causal inference, we train a model based on the control group observations, then use the model to predict counterfactuals
+\pause
+- If $\hat{f} = \bar{Y}_{D_i = 0}$, what do we have?    
+\pause 
+Random experiment
+\pause
+- If $\hat{f} = \bar{Y}_{D_i = 0, \mathbf{X} = \mathbf{x}}$, what do we have?    
+\pause 
+Blocking experiment or matching
+\pause
+- Now, what is the assumption behind regression?   
+\pause
+$\hat{f} = \mathbf{X}_{D_i = 0} \beta$ (Linearity)  
+$\gamma_i = \gamma$ for any $i$ (Constant treatment effect) 
+\pause
+- Matching: low bias and high variance; regression: high bias and low variance
+
+# Causal inference from a machine learning perpective
+- It is straightfoward to drop the constant treatment effect assumption   
+$\hat{\gamma}_i = Y_i - \mathbf{X}_{D_i = 0} \hat{\beta}$ (Regression with interaction)
+- Replacing $\mathbf{X}_{D_i = 0} \beta$ with $(\mathbf{X}_{D_i = 0} - \bar{\mathbf{X}}_{D_i = 0}) \beta$, we get the more efficient Lin's regression
+\pause
+- Question: How to get rid of the linearity assumption?
+
+# Some Jargons
+- Causal inference is built upon the assumption of (strong) ignorability 
+\pause
+- But assumptions imposed on $\hat{f}$ are up to the researcher's decision
+\pause
+- Design-based perspective vs. Model-based perspective
+\pause
+- With no extra assumption: Agnostic, or non-parametric estimation      
+\pause
+Group-mean difference, Matching
+- When a complete model is specified: Parametric estimation   
+\pause 
+Regression, Probit, Logit, All Bayesian approaches, etc.
+- With some "structure" assumed for $\hat{f}$: Semi-parametric estimation   
+\pause Kernelized or serial estimation, factor models
+- Two types of pre-treatment attributes: confounders and covariates
+
+
+# Problems with naive regression
+- It is biased and inconsistent under treatment effect heterogeneity   
+\pause
+- What is its expectation then?   
+Abadie et al. (2017): a weighted sum of the true individualistic effects under linearity, and a weighted sum of something without linearity
+\pause
+- Should we add as many covariates as possible?   
+No. Covariates may sometimes amplify the existing bias (Middleton et al., 2016)   
+1. $X$ may absorb the variation of $D$ and reduces its explanatory power of $Y$   
+2. If $X$ is negatively correlated with $Y$ and the unobservables are positively correlated with $Y$, leaving $X$ outside the regression may offset the impact of the unobservables
+
+
+# Covariate Adjustment in sampling
+- Imagine that we are biologists who are interested in leaf size.
+- Finding the size of leaves is hard, but weighting leaves is easy.
+- We can use auxilliary information to be smarter:
+    - Sample from leaves on a tree.
+    - Measure their size and weight.
+    - Let $\bar{y}_s$ be the average size in the sample.
+    - Let $\bar{x}_s$ be the average weight in the sample.
+    - We know that $\bar{y}_s$ unbiased and consistent for $\bar{y}$
+    - But we have extra information!
+    - We also have $\bar{x}$ (all the weights)
+    - This motivates the regression estimator:  
+    $\hat{\bar{y}} = \bar{y}_s + \beta(\bar{x}-\bar{x}_s)$
+    - We get $\beta$ by a regression of leaf area on weight in the sample.
+    
+# A Social Science Example
+- We are interested in the effect of a binary treatment on test scores.
+- Let's set up a simulation.
+- 200 students. Observed over two years.
+- Half good tutors and half bad since the second year.
+- We want to estimate the effect of the intervention in year 2.
+- Treatment is assigned randomly
+- Test score in the first year will be a covariate
+
+
+# Simulation
+
+```{r 2-educ-sim, echo=FALSE}
+rm(list=ls())
+#Variables which govern the size of the simulation (and our causal effects)
+nstudent <- 200
+Eff <- 10
+EffSD <- 10 #treatment effect heterogeneity#
+# Simulate data
+Yr1Score <- rnorm(nstudent, 70, 5)
+demeaned_Yr1Score <- Yr1Score - mean(Yr1Score)
+CtlOutcome <- rnorm(nstudent, log(Yr1Score) * 18, 3)
+# CtlOutcome <- rnorm(nstudent, log(Yr1Score) * 18 * (Yr1Score < 76) + Yr1Score * (Yr1Score >= 76), 3)
+# plot(log(Yr1Score) * 18 * (Yr1Score < 76) + exp(-Yr1Score / 100) * 160 * (Yr1Score >= 76) ~ Yr1Score)
+TrOutcome <- CtlOutcome + rnorm(nstudent, Eff, EffSD)
+RealATE <- mean(TrOutcome - CtlOutcome)
+# Fixed margins randomization
+Trt  <- rep(0, nstudent)
+Trt[sample(c(1:length(Trt)), length(Trt)/2)] <- 1
+Yr2Obs <- CtlOutcome * (1 - Trt) + Trt * TrOutcome
+```
+
+```{r 2-educ-reg_comparison}
+cat("Real ATE =", RealATE, "\n")
+round(summary(lm(Yr2Obs~Trt))$coefficients[2,], 4)
+round(summary(lm(Yr2Obs~Trt+Yr1Score))$coefficients[2,], 4)
+round(summary(lm(Yr2Obs~Trt*demeaned_Yr1Score))$coefficients[2,], 4)
+```
+
+# Coefficient Plot Code
+
+```{r 2-coef-plots-show,echo=FALSE,fig.cap='',fig.width=7,fig.height=7, echo=FALSE}
+ests <- c(coef(lm(Yr2Obs~Trt))[2], coef(lm(Yr2Obs~Trt+Yr1Score))[2], coef(lm(Yr2Obs~Trt*demeaned_Yr1Score))[2])
+ses <- c(summary(lm(Yr2Obs~Trt))$coefficients[2,2], summary(lm(Yr2Obs~Trt+Yr1Score))$coefficients[2,2], summary(lm(Yr2Obs~Trt*demeaned_Yr1Score))$coefficients[2,2])
+var.names <- c("Unadjusted", "Adjusted", "Lin's")
+
+par(
+  family = "serif",
+  oma = c(0,0,0,0),
+  mar = c(5,10,4,2)
+)
+  
+plot(NULL,
+  xlim = c(-0.2, 12),
+  ylim = c(.7, length(ests) + .3),
+  axes = F, xlab = NA, ylab = NA)
+  
+for (i in 1:length(ests)) {
+  points(ests[i], i, pch = 19, cex = .5)
+  lines(c(ests[i] + 1.64*ses[i], ests[i] - 1.64*ses[i]), c(i, i), lwd = 3)
+  lines(c(ests[i] + 1.96*ses[i], ests[i] - 1.96*ses[i]), c(i, i))
+  text(-1.1, i, var.names[i], xpd = T, cex = .8,pos=2)
+}
+
+axis(side = 1)
+abline(v = 0, lty = 3, col = "black")
+abline(v=Eff, lty = 5, col = "blue")
+mtext(side = 1, "Estimated Effect", line = 3)
+mtext(side = 3, "Regression Coefficients", line = 1)
+box()    
+```
+
+# Regression Table
+
+```{r 2-coef-table,echo=FALSE,fig.cap='',fig.width=7,fig.height=7, echo=FALSE}
+require(stargazer)
+reg1 <- lm(Yr2Obs~Trt)
+reg2 <- lm(Yr2Obs~Trt+Yr1Score)
+reg3 <- lm(Yr2Obs~Trt*demeaned_Yr1Score)
+stargazer(reg1, reg2, reg3, 
+          covariate.labels = c("Treatment", "Yr1 Score", "Yr1 Score (demeaned)", "Tr. * Yr1 Score"), 
+          digits = 3, keep = c("Trt", "Yr1Score", "demeaned_Yr1Score", "Trt:demeaned_Yr1Score"), star.cutoffs = c(0.05, 0.01, 0.001),
+          title = "Regression Results", no.space = T)
+
+```
+
+# Regression Table
+\begin{table}[!htbp] \centering 
+  \caption{Regression Results} 
+  \label{} 
+\begin{tabular}{@{\extracolsep{5pt}}lccc} 
+\\[-1.8ex]\hline 
+\hline \\[-1.8ex] 
+ & \multicolumn{3}{c}{\textit{Dependent variable:}} \\ 
+\cline{2-4} 
+\\[-1.8ex] & \multicolumn{3}{c}{Yr2Obs} \\ 
+\\[-1.8ex] & (1) & (2) & (3)\\ 
+\hline \\[-1.8ex] 
+ Treatment & 8.452$^{***}$ & 8.240$^{***}$ & 8.222$^{***}$ \\ 
+  & (1.247) & (1.236) & (1.235) \\ 
+  Yr1 Score &  & 0.271$^{*}$ &  \\ 
+  &  & (0.114) &  \\ 
+  Yr1 Score (demeaned) &  &  & 0.430$^{*}$ \\ 
+  &  &  & (0.177) \\ 
+  Tr. * Yr1 Score &  &  & $-$0.271 \\ 
+  &  &  & (0.231) \\ 
+ \hline \\[-1.8ex] 
+Observations & 200 & 200 & 200 \\ 
+R$^{2}$ & 0.188 & 0.211 & 0.216 \\ 
+Adjusted R$^{2}$ & 0.184 & 0.203 & 0.204 \\ 
+Residual Std. Error & 8.819 (df = 198) & 8.717 (df = 197) & 8.709 (df = 196) \\ 
+F Statistic & 45.928$^{***}$ (df = 1; 198) & 26.322$^{***}$ (df = 2; 197) & 18.041$^{***}$ (df = 3; 196) \\ 
+\hline 
+\hline \\[-1.8ex] 
+\textit{Note:}  & \multicolumn{3}{r}{$^{*}$p$<$0.05; $^{**}$p$<$0.01; $^{***}$p$<$0.001} \\ 
+\end{tabular} 
+\end{table} 
+
+# Unbiasedness
+```{r 2-educ-unbiasedness, echo=FALSE}
+coefs <- matrix(NA, 1000, 3)
+for (i in 1:1000){
+  Trt  <- rep(0, nstudent)
+  Trt[sample(c(1:length(Trt)), length(Trt)/2)] <- 1
+  Yr2Obs <- CtlOutcome * (1 - Trt) + Trt * TrOutcome
+  coefs[i, 1] <- coef(lm(Yr2Obs~Trt))[2]
+  coefs[i, 2] <- coef(lm(Yr2Obs~Trt+Yr1Score))[2]
+  coefs[i, 3] <- coef(lm(Yr2Obs~Trt*demeaned_Yr1Score))[2]
+}
+
+
+
+```
+
+```{r 2-educ-show_unbiasedness}
+cat("Real ATE =", RealATE, "\n")
+mean(coefs[, 1]) - RealATE
+mean(coefs[, 2]) - RealATE
+mean(coefs[, 3]) - RealATE
+
+```
+
+# Consistency
+```{r 2-educ-consistency, echo=FALSE}
+sample_sizes <- seq(20, 1000, 20)
+coefs <- matrix(NA, length(sample_sizes), 3)
+RealATEs <- rep(NA, length(sample_sizes))
+for (i in 1:length(sample_sizes)){
+  nstudent <- sample_sizes[i]
+  Yr1Score <- rnorm(nstudent, 76, 1)
+  demeaned_Yr1Score <- Yr1Score - mean(Yr1Score)
+  CtlOutcome <- rnorm(nstudent, log(Yr1Score) * 18, 1)
+  TrOutcome <- CtlOutcome + rnorm(nstudent, Eff, EffSD)
+  RealATEs[i] <- mean(TrOutcome - CtlOutcome)
+  Trt  <- rep(0, nstudent)
+  Trt[sample(c(1:length(Trt)), length(Trt)/2)] <- 1
+  Yr2Obs <- CtlOutcome * (1 - Trt) + Trt * TrOutcome
+  coefs[i, 1] <- coef(lm(Yr2Obs~Trt))[2]
+  coefs[i, 2] <- coef(lm(Yr2Obs~Trt+Yr1Score))[2]
+  coefs[i, 3] <- coef(lm(Yr2Obs~Trt*demeaned_Yr1Score))[2]
+}
+
+```
+
+```{r 2-educ-show_consistency, fig.cap='', fig.width=4, fig.height=4, echo=FALSE}
+par(mfrow=c(1,3))
+plot(coefs[, 1] - RealATEs ~ sample_sizes, type = "l", ylab = "Bias", xlab = "Sample Size")
+abline(h = 0, lty = 3, col = "blue")
+plot(coefs[, 2] - RealATEs ~ sample_sizes, type = "l", ylab = "Bias", xlab = "Sample Size")
+abline(h = 0, lty = 3, col = "blue")
+plot(coefs[, 3] - RealATEs ~ sample_sizes, type = "l", ylab = "Bias", xlab = "Sample Size")
+abline(h = 0, lty = 3, col = "blue")
+```
+
+# Plot Data
+```{r 2-educ-plot, fig.cap='',fig.width=4,fig.height=4, echo=FALSE}
+plot(jitter(Trt),Yr2Obs,axes=F,xlab="Treatment",ylab="Test Result (Yr 2)",col="grey")
+axis(2)
+axis(1,at=c(0,1))
+# Calculate quantities for plotting CIs
+mns <- tapply(Yr2Obs,Trt,mean)
+# SEs could also be pulled from the linear models we fit above with:
+ses <- tapply(Yr2Obs,Trt,function(x) sd(x)/sqrt(length(x)))
+points(c(0,1),mns,col="red",pch=19)
+# Note the loop so that I only write this code once
+for(tr in unique(Trt)) {
+  for(q in c(.25,.025)) {
+    upr<-mns[as.character(tr)]+qnorm(1-q)*ses[as.character(tr)]
+    lwr <- mns[as.character(tr)]-qnorm(1-q)*ses[as.character(tr)]
+    segments(tr,upr,tr,lwr,lwd=(-4/log(q)))
+  }
+}
+```
+
+# Partial Regression and Residualized Plot
+
+- Can we make that plot a little more friendly?
+- Let's residualize our outcome based on scores in the first period. This should remove a substantial amount of the variance in the outcome.
+
+. . .
+
+# Partial Regression and Residualized Plot
+
+```{r 2-resid-it, fig.cap='',fig.width=12,fig.height=6, echo=FALSE}
+OutcomeRes <- residuals(lm(Yr2Obs~Yr1Score+0))
+TrtRes <- residuals(lm(Trt~Yr1Score+0))
+#c(sd(OutcomeRes),sd(Yr2Obs))
+
+par(mfrow=c(2,1))
+plot(jitter(Trt),Yr2Obs,axes=F,xlab="Treatment",ylab="Test Result (Yr 2)",col="grey")
+axis(2)
+axis(1,at=c(0,1))
+# Calculate quantities for plotting CIs
+mns <- tapply(Yr2Obs,Trt,mean)
+# SEs could also be pulled from the linear models we fit above with:
+ses <- tapply(Yr2Obs,Trt,function(x) sd(x)/sqrt(length(x)))
+points(c(0,1),mns,col="red",pch=19)
+# Note the loop so that I only write this code once
+for(tr in unique(Trt)) {
+  for(q in c(.25,.025)) {
+    upr<-mns[as.character(tr)]+qnorm(1-q)*ses[as.character(tr)]
+    lwr <- mns[as.character(tr)]-qnorm(1-q)*ses[as.character(tr)]
+    segments(tr,upr,tr,lwr,lwd=(-4/log(q)))
+  }
+}
+plot(jitter(TrtRes),OutcomeRes,axes=F,xlab="Treatment (residuals)",ylab="Test Result (residuals)",col="grey")
+axis(2)
+axis(1)
+# Pull information from the new bivariate model
+mns<-coef(lm(OutcomeRes~TrtRes))
+ses<-summary(lm(OutcomeRes~TrtRes))$coefficients[,2]
+TrtResMns<-tapply(TrtRes,Trt,mean)
+names(ses)<-names(mns)<-names(TrtResMns)
+points(TrtResMns,mns,col="red",pch=19)
+for(tr in names(TrtResMns)) {
+  for(q in c(.25,.025)) {
+    upr<-mns[tr]+qnorm(1-q)*ses[tr]
+    lwr <- mns[tr]-qnorm(1-q)*ses[tr]
+    segments(TrtResMns[tr],upr,TrtResMns[tr],lwr,lwd=(-4/log(q)))
+  }
+}
+```
+
+
+# Partial Regression for FEs
+- We'll get to this later in the semester.
+- The point is, partial regression is a fundamentally important tool that let's us do things that would otherwise be very hard.
+
+. . .
+
+```{r 2-sweep-fes, echo=FALSE}
+sweeplm <- function(formula,dat,ind) {
+  newd <- model.matrix(~.,model.frame(formula,dat,na.action=na.pass))
+  newd <- newd[,-1]
+  ok <- complete.cases(newd)
+  newd <- newd[ok,]
+  ind <- ind[ok]
+  newd <- apply(newd,2,function(x) unlist(tapply(x,ind,function(z) z-mean(z,na.rm=TRUE))))
+  list(lm(newd[,1]~newd[,-1]-1,as.data.frame(newd)),newd,as.character(ind))
+}
+```
+
+\pause
+- When the panel is unbalanced, this is not correct...
+
+# Testing linear Restrictions
+- Hypothesis: $R \beta = r$
+- $W=(R\hat{\beta} - r)'(R\hat{\boldsymbol V}R')^{-1}(R\hat{\beta}-r) \sim \chi_q^2$
+- Or more conservatively: $W / q \sim F_{q,N-K}$
+- In R:
+
+. . .
+
+```{r 2-linear-restrict, echo=FALSE}
+R <- cbind(0,diag(2))
+b <- matrix(coef(lm(Yr2Obs~Trt+Yr1Score)),ncol=1)
+r <- matrix(0,nrow=2,ncol=1)
+V <- vcov(lm(Yr2Obs~Trt+Yr1Score))
+W <- t(R%*%b-r)%*%solve(R%*%V%*%t(R))%*%(R%*%b-r)
+pvalue1 <- 2*pchisq(W,2,lower.tail=FALSE)
+pvalue2 <- 2*pf(W/2,2,lm(Yr2Obs~Trt+Yr1Score)$df.residual,lower.tail=FALSE)
+```
+
+
+- Think about how these two might differ for different starting parameters (ex. sample size)
