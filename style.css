@@ -2,7 +2,7 @@ body {
 	font-family: Helvetica, Arial, sans-serif;
 	font-size:12px;
 	cursor:default;
-	background-color:#FFFFFF;
+	background-color:#83BCF4;
 	font-weight:normal;
 }
 * {
@@ -16,11 +16,11 @@ html {
 	margin-bottom:1px;
 }
 #container {
-	width: 450px;
+	width: 600px;
 	margin-right: auto;
 	margin-left: auto;
 	text-align:center;
-	background-color: #FFFFFF;
+	background-color: #83BCF4;
 }
 #header {
 	width:100%;
@@ -40,7 +40,7 @@ hr {
 }
 h1 {
 	font-size:28px;
-	color:black;
+	color:#030303;
 	background-color:#FFFFFF;
 	font-weight:normal;
 }
@@ -51,7 +51,7 @@ h2 {
 	background-color:#FFFFFF;
 }
 h3 {
-	color:black;
+	color:#030303;
 	font-size:15px;
 	text-align:center;
 	font-weight:normal;
