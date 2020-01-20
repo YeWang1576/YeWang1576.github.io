@@ -40,7 +40,7 @@ hr {
 }
 h1 {
 	font-size:28px;
-	color:#993300;
+	color:black;
 	background-color:#FFFFFF;
 	font-weight:normal;
 }
@@ -51,7 +51,7 @@ h2 {
 	background-color:#FFFFFF;
 }
 h3 {
-	color:#993300;
+	color:black;
 	font-size:15px;
 	text-align:center;
 	font-weight:normal;
