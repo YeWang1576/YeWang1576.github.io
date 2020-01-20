@@ -80,18 +80,18 @@ h4 {
 }
 p {
 	color:black;
-	background-color:#FFFFFF;
+	background-color:#83BCF4;
 	line-height:20px;
 	padding:5px;
 }
 a {
 	color:#993300;
-	background-color:#FFFFFF;
+	background-color:#83BCF4;
 	text-decoration:none;
 }
 a:hover {
 	color:#993300;
-	background-color:#FFFFFF;
+	background-color:#83BCF4;
 	text-decoration:underline;
 }
 #footer {
